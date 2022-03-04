@@ -52,7 +52,7 @@ FOUNDATION_EXTERN MGL_EXPORT MGLExceptionName const _Nonnull MGLUnderlyingMapUna
 - (void)setNeedsRerender;
 
 /// Synchronously render a frame of the map.
-- (void)renderSync;
+- (BOOL)renderSync;
 
 - (nonnull mbgl::Renderer *)renderer;
 
@@ -70,6 +70,7 @@ FOUNDATION_EXTERN MGL_EXPORT MGLExceptionName const _Nonnull MGLUnderlyingMapUna
 @property (nonatomic, nonnull) MGLUserLocationAnnotationView *userLocationAnnotationView;
 @property (nonatomic, nonnull) MGLAnnotationContainerView *annotationContainerView;
 @property (nonatomic, readonly) BOOL enablePresentsWithTransaction;
+@property (nonatomic, assign) BOOL needsDisplayRefresh;
 
 - (BOOL) _opaque;
 

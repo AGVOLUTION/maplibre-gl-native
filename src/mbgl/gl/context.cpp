@@ -14,6 +14,7 @@
 #include <mbgl/util/logging.hpp>
 
 #include <cstring>
+#include <iterator>
 
 namespace mbgl {
 namespace gl {
@@ -58,7 +59,7 @@ Context::Context(RendererBackend& backend_)
       backend(backend_),
       stats() {}
 
-Context::~Context() {
+Context::~Context() noexcept {
     if (cleanupOnDestruction) {
         reset();
         assert(stats.isZero());
@@ -315,7 +316,7 @@ std::unique_ptr<uint8_t[]> Context::readFramebuffer(const Size size, const gfx::
     return data;
 }
 
-#if not MBGL_USE_GLES2
+#if !MBGL_USE_GLES2
 void Context::drawPixels(const Size size, const void* data, gfx::TexturePixelType format) {
     pixelStoreUnpack = { 1 };
     // TODO
@@ -485,7 +486,7 @@ void Context::setDirtyState() {
     activeTextureUnit.setDirty();
     pixelStorePack.setDirty();
     pixelStoreUnpack.setDirty();
-#if not MBGL_USE_GLES2
+#if !MBGL_USE_GLES2
     pointSize.setDirty();
     pixelZoom.setDirty();
     rasterPos.setDirty();
@@ -609,7 +610,7 @@ void Context::draw(const gfx::DrawMode& drawMode,
                    std::size_t indexLength) {
     switch (drawMode.type) {
     case gfx::DrawModeType::Points:
-#if not MBGL_USE_GLES2
+#if !MBGL_USE_GLES2
         // In OpenGL ES 2, the point size is set in the vertex shader.
         pointSize = drawMode.size;
 #endif // MBGL_USE_GLES2
@@ -724,7 +725,7 @@ void Context::reduceMemoryUsage() {
     MBGL_CHECK_ERROR(glFinish());
 }
 
-#if not defined(NDEBUG)
+#if !defined(NDEBUG)
 void Context::visualizeStencilBuffer() {
 #if not MBGL_USE_GLES2
     setStencilMode(gfx::StencilMode::disabled());

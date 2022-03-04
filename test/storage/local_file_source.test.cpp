@@ -1,11 +1,20 @@
 #include <mbgl/storage/local_file_source.hpp>
 #include <mbgl/storage/resource.hpp>
+#include <mbgl/storage/resource_options.hpp>
 #include <mbgl/util/platform.hpp>
 #include <mbgl/util/run_loop.hpp>
 
-#include <unistd.h>
 #include <climits>
 #include <gtest/gtest.h>
+
+#if defined(WIN32)
+#include <Windows.h>
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif /* PATH_MAX */
+#else
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -22,7 +31,7 @@ std::string toAbsoluteURL(const std::string& fileName) {
 using namespace mbgl;
 
 TEST(LocalFileSource, AcceptsURL) {
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
     EXPECT_TRUE(fs.canRequest(Resource::style("file://empty")));
     EXPECT_TRUE(fs.canRequest(Resource::style("file:///test")));
     EXPECT_FALSE(fs.canRequest(Resource::style("flie://foo")));
@@ -34,7 +43,7 @@ TEST(LocalFileSource, AcceptsURL) {
 TEST(LocalFileSource, EmptyFile) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL("empty") }, [&](Response res) {
         req.reset();
@@ -50,7 +59,7 @@ TEST(LocalFileSource, EmptyFile) {
 TEST(LocalFileSource, NonEmptyFile) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL("nonempty") }, [&](Response res) {
         req.reset();
@@ -66,7 +75,7 @@ TEST(LocalFileSource, NonEmptyFile) {
 TEST(LocalFileSource, NonExistentFile) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL("does_not_exist") }, [&](Response res) {
         req.reset();
@@ -83,7 +92,7 @@ TEST(LocalFileSource, NonExistentFile) {
 TEST(LocalFileSource, InvalidURL) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, "test://wrong-scheme" }, [&](Response res) {
         req.reset();
@@ -100,7 +109,7 @@ TEST(LocalFileSource, InvalidURL) {
 TEST(LocalFileSource, ReadDirectory) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL("directory") }, [&](Response res) {
         req.reset();
@@ -117,7 +126,7 @@ TEST(LocalFileSource, ReadDirectory) {
 TEST(LocalFileSource, URLEncoding) {
     util::RunLoop loop;
 
-    LocalFileSource fs;
+    LocalFileSource fs(ResourceOptions::Default());
 
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL("%6eonempty") }, [&](Response res) {
         req.reset();
@@ -134,16 +143,23 @@ TEST(LocalFileSource, URLLimit) {
     util::RunLoop loop;
 
     size_t length = PATH_MAX - toAbsoluteURL("").size();
-    LocalFileSource fs;
-    char filename[length];
+    LocalFileSource fs(ResourceOptions::Default());
+    char* filename = new char[length];
     memset(filename, 'x', length);
 
     std::string url(filename, length);
 
+    delete[] filename;
+
     std::unique_ptr<AsyncRequest> req = fs.request({ Resource::Unknown, toAbsoluteURL(url) }, [&](Response res) {
         req.reset();
         ASSERT_NE(nullptr, res.error);
+#if defined(_MSC_VER) && !defined(__clang__)
+        // Microsoft Visual Studio defines PATH_MAX as 260, less than the limit to trigger an error with reason "Other"
+        EXPECT_EQ(Response::Error::Reason::NotFound, res.error->reason);
+#else
         EXPECT_EQ(Response::Error::Reason::Other, res.error->reason);
+#endif
         ASSERT_FALSE(res.data.get());
         loop.stop();
     });

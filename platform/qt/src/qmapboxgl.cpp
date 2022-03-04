@@ -46,6 +46,7 @@
 #include <mbgl/util/projection.hpp>
 #include <mbgl/util/rapidjson.hpp>
 #include <mbgl/util/run_loop.hpp>
+#include <mbgl/util/tile_server_options.hpp>
 #include <mbgl/util/traits.hpp>
 
 #include <QGuiApplication>
@@ -108,8 +109,13 @@ std::unique_ptr<mbgl::style::Image> toStyleImage(const QString &id, const QImage
         .rgbSwapped()
         .convertToFormat(QImage::Format_ARGB32_Premultiplied);
 
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    auto img = std::make_unique<uint8_t[]>(swapped.sizeInBytes());
+    memcpy(img.get(), swapped.constBits(), swapped.sizeInBytes());
+#else
     auto img = std::make_unique<uint8_t[]>(swapped.byteCount());
     memcpy(img.get(), swapped.constBits(), swapped.byteCount());
+#endif
 
     return std::make_unique<mbgl::style::Image>(
         id.toStdString(),
@@ -218,8 +224,8 @@ QMapboxGLSettings::QMapboxGLSettings()
     , m_cacheMaximumSize(mbgl::util::DEFAULT_MAX_CACHE_SIZE)
     , m_cacheDatabasePath(":memory:")
     , m_assetPath(QCoreApplication::applicationDirPath())
-    , m_accessToken(qgetenv("MAPBOX_ACCESS_TOKEN"))
-    , m_apiBaseUrl(mbgl::util::API_BASE_URL)
+    , m_apiKey(qgetenv("MGL_API_KEY"))
+    , m_tileServerOptionsInternal(new mbgl::TileServerOptions(mbgl::TileServerOptions::DefaultConfiguration()))
 {
 }
 
@@ -373,28 +379,24 @@ void QMapboxGLSettings::setAssetPath(const QString &path)
 }
 
 /*!
-    Returns the access token.
+    Returns the API key.
 
-    By default, it is taken from the environment variable \c MAPBOX_ACCESS_TOKEN
+    By default, it is taken from the environment variable \c MGL_API_KEY
     or empty if the variable is not set.
 */
-QString QMapboxGLSettings::accessToken() const {
-    return m_accessToken;
+QString QMapboxGLSettings::apiKey() const {
+    return m_apiKey;
 }
 
 /*!
-    Sets the access \a token.
+    Sets the API key.
 
-    Mapbox-hosted vector tiles and styles require an API
-    \l {https://www.mapbox.com/help/define-access-token/}{access token}, which you
-    can obtain from the \l {https://www.mapbox.com/studio/account/tokens/}
-    {Mapbox account page}. Access tokens associate requests to Mapbox's vector tile
-    and style APIs with your Mapbox account. They also deter other developers from
-    using your styles without your permission.
+    MapTiler-hosted and Mapbox-hosted vector tiles and styles require an API
+    key or access token.
 */
-void QMapboxGLSettings::setAccessToken(const QString &token)
+void QMapboxGLSettings::setApiKey(const QString &key)
 {
-    m_accessToken = token;
+    m_apiKey = key;
 }
 
 /*!
@@ -402,7 +404,7 @@ void QMapboxGLSettings::setAccessToken(const QString &token)
 */
 QString QMapboxGLSettings::apiBaseUrl() const
 {
-    return m_apiBaseUrl;
+    return QString::fromStdString(m_tileServerOptionsInternal->baseURL());
 }
 
 /*!
@@ -414,7 +416,7 @@ QString QMapboxGLSettings::apiBaseUrl() const
 */
 void QMapboxGLSettings::setApiBaseUrl(const QString& url)
 {
-    m_apiBaseUrl = url;
+    m_tileServerOptionsInternal = &m_tileServerOptionsInternal->withBaseURL(url.toStdString());
 }
 
 /*!
@@ -455,6 +457,47 @@ std::function<std::string(const std::string &)> QMapboxGLSettings::resourceTrans
 */
 void QMapboxGLSettings::setResourceTransform(const std::function<std::string(const std::string &)> &transform) {
     m_resourceTransform = transform;
+}
+
+/*!
+    Reset all settings based on the given template.
+
+    MapLibre can support servers with different resource path structure.
+    Some of the most common servers like Maptiler and Mapbox are defined
+    in the library. This function will re-initialise all settings based
+    on the default values of specific service provider defaults.
+*/
+void QMapboxGLSettings::resetToTemplate(SettingsTemplate settings_template)
+{
+    if(m_tileServerOptionsInternal) delete m_tileServerOptionsInternal;
+
+    if(settings_template == MapLibreSettings){
+        m_tileServerOptionsInternal = new mbgl::TileServerOptions(mbgl::TileServerOptions::MapLibreConfiguration());
+    }else if(settings_template == MapTilerSettings){
+        m_tileServerOptionsInternal = new mbgl::TileServerOptions(mbgl::TileServerOptions::MapTilerConfiguration());
+    }else if(settings_template == MapboxSettings){
+        m_tileServerOptionsInternal = new mbgl::TileServerOptions(mbgl::TileServerOptions::MapboxConfiguration());
+    }else{
+        m_tileServerOptionsInternal = new mbgl::TileServerOptions(mbgl::TileServerOptions::DefaultConfiguration());
+    }
+}
+
+/*!
+    All predefined styles.
+
+    Return all styles that are defined in default settings.
+*/
+QVector<QPair<QString, QString> > QMapboxGLSettings::defaultStyles() const {
+    QVector<QPair<QString, QString>> styles;
+    for (const auto &style : tileServerOptionsInternal()->defaultStyles()) {
+        styles.append(QPair<QString, QString>(
+                                 QString::fromStdString(style.getUrl()), QString::fromStdString(style.getName())));
+    }
+    return styles;
+}
+
+mbgl::TileServerOptions *QMapboxGLSettings::tileServerOptionsInternal() const {
+    return m_tileServerOptionsInternal;
 }
 
 /*!
@@ -1196,8 +1239,8 @@ QMapbox::Coordinate QMapboxGL::coordinateForPixel(const QPointF &pixel) const
     Returns the coordinate and zoom combination needed in order to make the coordinate
     bounding box \a sw and \a ne visible.
 */
-QMapbox::CoordinateZoom QMapboxGL::coordinateZoomForBounds(const QMapbox::Coordinate &sw, QMapbox::Coordinate &ne) const
-{
+QMapbox::CoordinateZoom QMapboxGL::coordinateZoomForBounds(const QMapbox::Coordinate &sw,
+                                                           const QMapbox::Coordinate &ne) const {
     auto bounds = mbgl::LatLngBounds::hull(mbgl::LatLng { sw.first, sw.second }, mbgl::LatLng { ne.first, ne.second });
     mbgl::CameraOptions camera = d_ptr->mapObj->cameraForLatLngBounds(bounds, d_ptr->margins);
 
@@ -1208,8 +1251,10 @@ QMapbox::CoordinateZoom QMapboxGL::coordinateZoomForBounds(const QMapbox::Coordi
     Returns the coordinate and zoom combination needed in order to make the coordinate
     bounding box \a sw and \a ne visible taking into account \a newBearing and \a newPitch.
 */
-QMapbox::CoordinateZoom QMapboxGL::coordinateZoomForBounds(const QMapbox::Coordinate &sw, QMapbox::Coordinate &ne,
-    double newBearing, double newPitch)
+QMapbox::CoordinateZoom QMapboxGL::coordinateZoomForBounds(const QMapbox::Coordinate &sw,
+                                                           const QMapbox::Coordinate &ne,
+                                                           double newBearing,
+                                                           double newPitch)
 
 {
     auto bounds = mbgl::LatLngBounds::hull(mbgl::LatLng { sw.first, sw.second }, mbgl::LatLng { ne.first, ne.second });
@@ -1342,14 +1387,14 @@ void QMapboxGL::removeSource(const QString& id)
     this API and is not officially supported. Use at your own risk.
 */
 void QMapboxGL::addCustomLayer(const QString &id,
-        QScopedPointer<QMapbox::CustomLayerHostInterface>& host,
-        const QString& before)
+        std::unique_ptr<QMapbox::CustomLayerHostInterface> host,
+        const QString &before)
 {
     class HostWrapper : public mbgl::style::CustomLayerHost {
         public:
-        QScopedPointer<QMapbox::CustomLayerHostInterface> ptr;
-        HostWrapper(QScopedPointer<QMapbox::CustomLayerHostInterface>& p)
-         : ptr(p.take()) {
+        std::unique_ptr<QMapbox::CustomLayerHostInterface> ptr{};
+        HostWrapper(std::unique_ptr<QMapbox::CustomLayerHostInterface> p)
+         : ptr(std::move(p)) {
          }
 
         void initialize() {
@@ -1378,7 +1423,7 @@ void QMapboxGL::addCustomLayer(const QString &id,
 
     d_ptr->mapObj->getStyle().addLayer(std::make_unique<mbgl::style::CustomLayer>(
             id.toStdString(),
-            std::make_unique<HostWrapper>(host)),
+            std::make_unique<HostWrapper>(std::move(host))),
             before.isEmpty() ? mbgl::optional<std::string>() : mbgl::optional<std::string>(before.toStdString()));
 }
 
@@ -1442,7 +1487,7 @@ QVector<QString> QMapboxGL::layerIds() const
     const auto &layers = d_ptr->mapObj->getStyle().getLayers();
 
     QVector<QString> layerIds;
-    layerIds.reserve(layers.size());
+    layerIds.reserve(static_cast<int>(layers.size()));
 
     for (const mbgl::style::Layer *layer : layers) {
         layerIds.append(QString::fromStdString(layer->getID()));
@@ -1535,7 +1580,7 @@ QVariant QVariantFromValue(const mbgl::Value &value) {
             return QColor(value_.r, value_.g, value_.b, value_.a);
         }, [&](const std::vector<mbgl::Value> &vector) {
             QVariantList list;
-            list.reserve(vector.size());
+            list.reserve(static_cast<int>(vector.size()));
             for (const auto &value_ : vector) {
                 list.push_back(QVariantFromValue(value_));
             }
@@ -1654,6 +1699,15 @@ void QMapboxGL::connectionEstablished()
 }
 
 /*!
+    Returns a list containing a pair of string objects, representing the style
+    URL and name, respectively.
+*/
+const QVector<QPair<QString, QString>> &QMapboxGL::defaultStyles() const
+{
+    return d_ptr->defaultStyles;
+}
+
+/*!
     \fn void QMapboxGL::needsRendering()
 
     This signal is emitted when the visual contents of the map have changed
@@ -1708,9 +1762,9 @@ mbgl::MapOptions mapOptionsFromQMapboxGLSettings(const QMapboxGLSettings &settin
 
 mbgl::ResourceOptions resourceOptionsFromQMapboxGLSettings(const QMapboxGLSettings &settings) {
     return std::move(mbgl::ResourceOptions()
-        .withAccessToken(settings.accessToken().toStdString())
+        .withApiKey(settings.apiKey().toStdString())
         .withAssetPath(settings.assetPath().toStdString())
-        .withBaseURL(settings.apiBaseUrl().toStdString())
+        .withTileServerOptions(*settings.tileServerOptionsInternal())
         .withCachePath(settings.cacheDatabasePath().toStdString())
         .withMaximumCacheSize(settings.cacheDatabaseMaximumSize()));
 }
@@ -1726,11 +1780,15 @@ QMapboxGLPrivate::QMapboxGLPrivate(QMapboxGL *q, const QMapboxGLSettings &settin
 
     qRegisterMetaType<QMapboxGL::MapChange>("QMapboxGL::MapChange");
 
-    connect(m_mapObserver.get(), SIGNAL(mapChanged(QMapboxGL::MapChange)), q, SIGNAL(mapChanged(QMapboxGL::MapChange)));
-    connect(m_mapObserver.get(), SIGNAL(mapLoadingFailed(QMapboxGL::MapLoadingFailure,QString)), q, SIGNAL(mapLoadingFailed(QMapboxGL::MapLoadingFailure,QString)));
-    connect(m_mapObserver.get(), SIGNAL(copyrightsChanged(QString)), q, SIGNAL(copyrightsChanged(QString)));
+    connect(m_mapObserver.get(), &QMapboxGLMapObserver::mapChanged, q, &QMapboxGL::mapChanged);
+    connect(m_mapObserver.get(), &QMapboxGLMapObserver::mapLoadingFailed, q, &QMapboxGL::mapLoadingFailed);
+    connect(m_mapObserver.get(), &QMapboxGLMapObserver::copyrightsChanged, q, &QMapboxGL::copyrightsChanged);
 
     auto resourceOptions = resourceOptionsFromQMapboxGLSettings(settings);
+    for (auto style : resourceOptions.tileServerOptions().defaultStyles()) {
+        defaultStyles.append(QPair<QString, QString>(
+            QString::fromStdString(style.getUrl()), QString::fromStdString(style.getName())));
+    }
 
     // Setup the Map object.
     mapObj = std::make_unique<mbgl::Map>(*this, *m_mapObserver,
@@ -1757,7 +1815,7 @@ QMapboxGLPrivate::QMapboxGLPrivate(QMapboxGL *q, const QMapboxGLSettings &settin
      }
 
     // Needs to be Queued to give time to discard redundant draw calls via the `renderQueued` flag.
-    connect(this, SIGNAL(needsRendering()), q, SIGNAL(needsRendering()), Qt::QueuedConnection);
+    connect(this, &QMapboxGLPrivate::needsRendering, q, &QMapboxGL::needsRendering, Qt::QueuedConnection);
 }
 
 QMapboxGLPrivate::~QMapboxGLPrivate()
@@ -1805,7 +1863,7 @@ void QMapboxGLPrivate::createRenderer()
         m_localFontFamily
     );
 
-    connect(m_mapRenderer.get(), SIGNAL(needsRendering()), this, SLOT(requestRendering()));
+    connect(m_mapRenderer.get(), &QMapboxGLMapRenderer::needsRendering, this, &QMapboxGLPrivate::requestRendering);
 
     m_mapRenderer->setObserver(m_rendererObserver);
 
@@ -1865,7 +1923,11 @@ bool QMapboxGLPrivate::setProperty(const PropertySetter& setter, const QString& 
 
     mbgl::optional<conversion::Error> result;
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    if (value.typeId() == QMetaType::QString) {
+#else
     if (value.type() == QVariant::String) {
+#endif
         mbgl::JSDocument document;
         document.Parse<0>(value.toString().toStdString());
         if (!document.HasParseError()) {

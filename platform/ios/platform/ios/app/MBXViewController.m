@@ -12,6 +12,7 @@
 #import "MBXOrnamentsViewController.h"
 #import "MBXStateManager.h"
 #import "MBXState.h"
+#import "MGLSettings.h"
 
 #import "MBXFrameTimeGraphView.h"
 #import "../src/MGLMapView_Experimental.h"
@@ -136,7 +137,7 @@ CLLocationCoordinate2D coordinateCentered(CLLocationCoordinate2D origin, CLLocat
     return result;
 }
 
-CLLocationCoordinate2D randomWorldCoordinate() {
+CLLocationCoordinate2D randomWorldCoordinate(void) {
 
     static const struct {
         CLLocationCoordinate2D coordinate;
@@ -203,6 +204,8 @@ CLLocationCoordinate2D randomWorldCoordinate() {
 @property (weak, nonatomic) IBOutlet UIButton *hudLabel;
 @property (weak, nonatomic) IBOutlet MBXFrameTimeGraphView *frameTimeGraphView;
 @property (nonatomic) NSInteger styleIndex;
+@property (nonatomic) NSMutableArray* styleNames;
+@property (nonatomic) NSMutableArray* styleURLs;
 @property (nonatomic) BOOL customUserLocationAnnnotationEnabled;
 @property (nonatomic, getter=isLocalizingLabels) BOOL localizingLabels;
 @property (nonatomic) BOOL reuseQueueStatsEnabled;
@@ -255,11 +258,9 @@ CLLocationCoordinate2D randomWorldCoordinate() {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(restoreMapState:) name:UIApplicationWillEnterForegroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(saveCurrentMapState:) name:UIApplicationWillTerminateNotification object:nil];
 
-    if ([MGLAccountManager accessToken].length)
-    {
-        self.styleIndex = -1;
-        [self cycleStyles:self];
-    }
+    self.styleIndex = -1;
+    [self setStyles];
+    [self cycleStyles:self];
 
     self.mapView.experimental_enableFrameRateMeasurement = YES;
     self.hudLabel.titleLabel.font = [UIFont monospacedDigitSystemFontOfSize:10 weight:UIFontWeightRegular];
@@ -282,7 +283,7 @@ CLLocationCoordinate2D randomWorldCoordinate() {
         UIWindow *helperWindow = [[UIWindow alloc] initWithFrame:helperScreen.bounds];
         helperWindow.screen = helperScreen;
         UIViewController *helperViewController = [[UIViewController alloc] init];
-        MGLMapView *helperMapView = [[MGLMapView alloc] initWithFrame:helperWindow.bounds styleURL:MGLStyle.satelliteStreetsStyleURL];
+        MGLMapView *helperMapView = [[MGLMapView alloc] initWithFrame:helperWindow.bounds styleURL:[[MGLStyle predefinedStyle:@"Hybrid"] url]];
         helperMapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         helperMapView.camera = self.mapView.camera;
         helperMapView.compassView.hidden = YES;
@@ -1062,7 +1063,7 @@ CLLocationCoordinate2D randomWorldCoordinate() {
 
 - (void)styleRasterLayer
 {
-    NSURL *rasterURL = [NSURL URLWithString:@"mapbox://mapbox.satellite"];
+    NSURL *rasterURL = [NSURL URLWithString:@"maptiler://sources/hybrid"];
     MGLRasterTileSource *rasterTileSource = [[MGLRasterTileSource alloc] initWithIdentifier:@"my-raster-tile-source" configurationURL:rasterURL tileSize:512];
     [self.mapView.style addSource:rasterTileSource];
 
@@ -1388,7 +1389,7 @@ CLLocationCoordinate2D randomWorldCoordinate() {
 
 - (void)styleVectorTileSource
 {
-    NSURL *url = [[NSURL alloc] initWithString:@"mapbox://mapbox.mapbox-terrain-v2"];
+    NSURL *url = [[NSURL alloc] initWithString:@"maptiler://source/hillshade"];
     MGLVectorTileSource *vectorTileSource = [[MGLVectorTileSource alloc] initWithIdentifier:@"style-vector-tile-source-id" configurationURL:url];
     [self.mapView.style addSource:vectorTileSource];
 
@@ -1898,56 +1899,41 @@ CLLocationCoordinate2D randomWorldCoordinate() {
     }
 }
 
+// MARK: - User defined Styles
+- (void)setStyles
+{
+    self.styleNames = [NSMutableArray array];
+    self.styleURLs = [NSMutableArray array];
+    
+    /// Style that does not require an `apiKey` nor any further configuration
+    [self.styleNames addObject:@"MapLibre Basic"];
+    [self.styleURLs addObject:[NSURL URLWithString:@"https://demotiles.maplibre.org/style.json"]];
+
+    /// Add Mapbox Styles if an `apiKey` exists
+    NSString* apiKey = [MGLSettings apiKey];
+    if (apiKey.length)
+    {
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            
+            for (MGLDefaultStyle* predefinedStyle in [MGLStyle predefinedStyles]){
+                [self.styleNames addObject:predefinedStyle.name];
+                [self.styleURLs addObject:predefinedStyle.url];
+            }
+        });
+    }
+    
+    NSAssert(self.styleNames.count == self.styleURLs.count, @"Style names and URLs don’t match.");
+}
+
 - (IBAction)cycleStyles:(__unused id)sender
 {
-    static NSArray *styleNames;
-    static NSArray *styleURLs;
+    self.styleIndex = (self.styleIndex + 1) % self.styleNames.count;
 
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        styleNames = @[
-            @"Streets",
-            @"Outdoors",
-            @"Light",
-            @"Dark",
-            @"Satellite",
-            @"Satellite Streets",
-        ];
-        styleURLs = @[
-            [MGLStyle streetsStyleURL],
-            [MGLStyle outdoorsStyleURL],
-            [MGLStyle lightStyleURL],
-            [MGLStyle darkStyleURL],
-            [MGLStyle satelliteStyleURL],
-            [MGLStyle satelliteStreetsStyleURL]
-        ];
-        NSAssert(styleNames.count == styleURLs.count, @"Style names and URLs don’t match.");
-
-        // Make sure defaultStyleURLs is up-to-date.
-        unsigned numMethods = 0;
-        Method *methods = class_copyMethodList(object_getClass([MGLStyle class]), &numMethods);
-        unsigned numStyleURLMethods = 0;
-        for (NSUInteger i = 0; i < numMethods; i++) {
-            Method method = methods[i];
-            if (method_getNumberOfArguments(method) == 3 /* _cmd, self, version */) {
-                SEL selector = method_getName(method);
-                NSString *name = @(sel_getName(selector));
-                if ([name hasSuffix:@"StyleURLWithVersion:"]) {
-                    numStyleURLMethods += 1;
-                }
-            }
-        }
-        NSAssert(numStyleURLMethods == styleNames.count,
-                 @"MGLStyle provides %u default styles but iosapp only knows about %lu of them.",
-                 numStyleURLMethods, (unsigned long)styleNames.count);
-    });
-
-    self.styleIndex = (self.styleIndex + 1) % styleNames.count;
-
-    self.mapView.styleURL = styleURLs[self.styleIndex];
+    self.mapView.styleURL = self.styleURLs[self.styleIndex];
 
     UIButton *titleButton = (UIButton *)self.navigationItem.titleView;
-    [titleButton setTitle:styleNames[self.styleIndex] forState:UIControlStateNormal];
+    [titleButton setTitle:self.styleNames[self.styleIndex] forState:UIControlStateNormal];
 }
 
 - (IBAction)locateUser:(id)sender

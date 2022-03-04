@@ -16,7 +16,7 @@
 - (void)setUp {
     [super setUp];
     
-    [MGLAccountManager setAccessToken:@"pk.feedcafedeadbeefbadebede"];
+    [MGLSettings setApiKey:@"pk.feedcafedeadbeefbadebede"];
     NSURL *styleURL = [[NSBundle bundleForClass:[self class]] URLForResource:@"one-liner" withExtension:@"json"];
     self.screenBounds = UIScreen.mainScreen.bounds;
     self.mapView = [[MGLMapView alloc] initWithFrame:self.screenBounds styleURL:styleURL];
@@ -45,7 +45,7 @@
 
 - (void)tearDown {
     self.mapView = nil;
-    [MGLAccountManager setAccessToken:nil];
+    [MGLSettings setApiKey:nil];
     [super tearDown];
 }
 
@@ -72,8 +72,6 @@
                                                (self.screenBounds.size.height/2) + ((contentInset.top - contentInset.bottom) / 2));
     XCTAssertEqualWithAccuracy(shiftedPoint.x, expectedShiftedPoint.x, 0.01);
     XCTAssertEqualWithAccuracy(shiftedPoint.y, expectedShiftedPoint.y, 0.01);
-    
-  
 }
 
 - (void)testContentInsetOrnaments {
@@ -171,7 +169,6 @@
     y = self.screenBounds.size.height - attributionView.bounds.size.height - margin;
     expectedAttributionOrigin = CGPointMake(x, y);
     XCTAssertTrue(CGPointEqualToPoint(attributionView.frame.origin, expectedAttributionOrigin));
-    
 }
 
 @end

@@ -207,8 +207,7 @@ MGL_EXPORT
 
  @param frame The frame for the view, measured in points.
  @param styleURL URL of the map style to display. The URL may be a full HTTP
-    or HTTPS URL, a Mapbox style URL
-    (`mapbox://styles/{user}/{style}`), or a path to a local file relative
+    or HTTPS URL, a canonical URL or a path to a local file relative
     to the application’s resource path. Specify `nil` for the default style.
  @return An initialized map view.
 
@@ -264,9 +263,8 @@ MGL_EXPORT
 /**
  URL of the style currently displayed in the receiver.
 
- The URL may be a full HTTP or HTTPS URL, a Mapbox
- style URL (`mapbox://styles/{user}/{style}`), or a path to a local file
- relative to the application’s resource path.
+ The URL may be a full HTTP or HTTPS URL, canonical URL, or
+ a path to a local file relative to the application’s resource path.
 
  If you set this property to `nil`, the receiver will use the default style
  and this property will automatically be set to that style’s URL.
@@ -327,6 +325,16 @@ MGL_EXPORT
  upper-left corner. Enable the scale bar via `showsScale`.
  */
 @property (nonatomic, readonly) UIView *scaleBar;
+
+/**
+ Sets whether the scale uses styles that make it easier to read on a dark styled map
+ */
+@property (nonatomic, assign) BOOL scaleBarShouldShowDarkStyles;
+
+/**
+ Sets whether the scale uses metric
+ */
+@property (nonatomic, assign) BOOL scaleBarUsesMetricSystem;
 
 /**
  The position of the scale bar. The default value is `MGLOrnamentPositionTopLeft`.
@@ -732,6 +740,12 @@ MGL_EXPORT
  The default value of this property is `YES`.
  */
 @property(nonatomic, getter=isPitchEnabled) BOOL pitchEnabled;
+
+/**
+ A Boolean value that determines whether gestures are anchored to the center coordinate of the map while rotating or zooming.
+ Default value is set to NO.
+ */
+@property(nonatomic) BOOL anchorRotateOrZoomGesturesToCenterCoordinate;
 
 /**
  A Boolean value that determines whether the user will receive haptic feedback
@@ -1371,6 +1385,19 @@ MGL_EXPORT
  method instead.
  */
 @property (nonatomic, assign) UIEdgeInsets contentInset;
+
+/**
+ The current edge insets of the current map view’s camera.
+
+ Camera edge insets are formed as accumulation of map view's content insets
+ and the edge padding passed to the method like `seCamera:...edgePadding:`,
+ `setVisibleCoordinates:...edgePadding:`, `showAnnotations:...edgePadding:` etc.
+
+ The camera edge insets influences the `centerCoordinate` of the viewport.
+ This value is read-only, in order to apply paddings,  use either persistent
+ `contentInset`, either transient `edgePadding` parameter of the `set...` methods.
+ */
+@property (nonatomic, readonly) UIEdgeInsets cameraEdgeInsets;
 
 /**
  Deprecated. Sets the distance from the edges of the map view’s frame to the edges

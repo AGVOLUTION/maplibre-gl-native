@@ -13,9 +13,15 @@
 #include <mbgl/util/thread.hpp>
 #include <mbgl/util/url.hpp>
 #include <mbgl/util/chrono.hpp>
+#include <mbgl/util/compression.hpp>
 
 #include <mbgl/storage/sqlite3.hpp>
+
+#if defined(__QT__) && defined(_WIN32)
+#include <QtZlib/zlib.h>
+#else
 #include <zlib.h>
+#endif
 
 namespace {
 //TODO: replace by mbgl::util::MBTILES_PROTOCOL
@@ -31,7 +37,7 @@ using namespace rapidjson;
 
 class MaptilerFileSource::Impl {
 public:
-    explicit Impl(const ActorRef<Impl>&) {}
+    explicit Impl(const ActorRef<Impl>&, const ResourceOptions& options): resourceOptions (options.clone()) {}
 
     std::vector<double> &split(const std::string &s, char delim, std::vector<double> &elems) {
         std::stringstream ss(s);
@@ -68,47 +74,6 @@ public:
 
     bool is_compressed(const std::string &v) {
         return (((uint8_t) v[0]) == 0x1f) && (((uint8_t) v[1]) == 0x8b);
-    }
-
-    // Some Mbtiles store GZIP-ed tile data, this function is used for decompression
-    std::string decompress_string(const std::string &data) {
-
-        uint32_t OUT_SIZE = 8192;
-
-        int ret;
-        char outbuffer[OUT_SIZE];
-        std::string outstring;
-
-        z_stream zs{};
-
-        // Init inflate to gzip mode
-        if (inflateInit2(&zs, (16 + MAX_WBITS)) != Z_OK)
-            return "";
-
-        zs.next_in = (Bytef *) data.data();
-        zs.avail_in = (unsigned int) data.size();
-
-
-        // get the decompressed bytes blockwise using repeated calls to inflate
-        do {
-            zs.next_out = reinterpret_cast<Bytef *>(outbuffer);
-            zs.avail_out = OUT_SIZE;
-
-            ret = inflate(&zs, 0);
-
-            if (outstring.size() < zs.total_out) {
-                outstring.append(outbuffer, zs.total_out - outstring.size());
-            }
-
-        } while (ret == Z_OK);
-
-        inflateEnd(&zs);
-
-        if (ret != Z_STREAM_END) { // an error occurred that was not EOF
-            return "";
-        }
-
-        return outstring;
     }
 
     // Generate a tilejson resource from .mbtiles file
@@ -253,11 +218,21 @@ public:
                 response.error.release();
 
                 if (is_compressed(*response.data)) {
-                    response.data = std::make_shared<std::string>(decompress_string(*response.data));
+                    response.data = std::make_shared<std::string>(util::decompress(*response.data));
                 }
             }
         }
         req.invoke(&FileSourceRequest::setResponse, response);
+    }
+
+    void setResourceOptions(ResourceOptions options) {
+            std::lock_guard<std::mutex> lock(resourceOptionsMutex);
+            resourceOptions = options;
+    }
+
+    ResourceOptions getResourceOptions() {
+        std::lock_guard<std::mutex> lock(resourceOptionsMutex);
+        return resourceOptions.clone();
     }
 
 private:
@@ -284,13 +259,15 @@ private:
         auto ptr2 = db_cache.insert(std::pair<std::string, mapbox::sqlite::Database>(path, mapbox::sqlite::Database::open(path.c_str(), mapbox::sqlite::ReadOnly)));
         return ptr2.first->second;
     }
+
+    mutable std::mutex resourceOptionsMutex;
+    ResourceOptions resourceOptions;
 };
 
 
-
-MaptilerFileSource::MaptilerFileSource() :
+MaptilerFileSource::MaptilerFileSource(const ResourceOptions& options) :
     thread(std::make_unique<util::Thread<Impl>>(
-        util::makeThreadPrioritySetter(platform::EXPERIMENTAL_THREAD_PRIORITY_FILE), "MaptilerFileSource")) {}
+        util::makeThreadPrioritySetter(platform::EXPERIMENTAL_THREAD_PRIORITY_FILE), "MaptilerFileSource", options.clone())) {}
 
 
 std::unique_ptr<AsyncRequest> MaptilerFileSource::request(const Resource &resource, FileSource::Callback callback) {
@@ -310,7 +287,7 @@ std::unique_ptr<AsyncRequest> MaptilerFileSource::request(const Resource &resour
             thread->actor().invoke(&Impl::request_tilejson, resource, req->actor());
         }
     }
-    return std::move(req);
+    return req;
 }
 
 bool MaptilerFileSource::canRequest(const Resource& resource) const {
@@ -319,5 +296,12 @@ bool MaptilerFileSource::canRequest(const Resource& resource) const {
 
 MaptilerFileSource::~MaptilerFileSource() = default;
 
+void MaptilerFileSource::setResourceOptions(ResourceOptions options) {
+    thread->actor().invoke(&Impl::setResourceOptions, options.clone());
+}
+
+ResourceOptions MaptilerFileSource::getResourceOptions() {
+    return thread->actor().ask(&Impl::getResourceOptions).get();
+}
 
 }

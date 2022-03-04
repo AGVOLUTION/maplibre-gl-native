@@ -2,7 +2,6 @@ find_package(CURL REQUIRED)
 find_package(ICU OPTIONAL_COMPONENTS i18n)
 find_package(ICU OPTIONAL_COMPONENTS uc)
 find_package(JPEG REQUIRED)
-find_package(OpenGL REQUIRED GLX)
 find_package(PNG REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(X11 REQUIRED)
@@ -50,8 +49,33 @@ target_sources(
         ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/timer.cpp
         ${PROJECT_SOURCE_DIR}/platform/default/src/mbgl/util/utf.cpp
         ${PROJECT_SOURCE_DIR}/platform/linux/src/gl_functions.cpp
-        ${PROJECT_SOURCE_DIR}/platform/linux/src/headless_backend_glx.cpp
 )
+
+if(MBGL_WITH_EGL)
+    find_package(OpenGL REQUIRED EGL)
+    target_sources(
+        mbgl-core
+        PRIVATE
+            ${PROJECT_SOURCE_DIR}/platform/linux/src/headless_backend_egl.cpp
+    )
+    target_link_libraries(
+        mbgl-core
+        PRIVATE
+            OpenGL::EGL
+    )
+else()
+    find_package(OpenGL REQUIRED GLX)
+    target_sources(
+        mbgl-core
+        PRIVATE
+            ${PROJECT_SOURCE_DIR}/platform/linux/src/headless_backend_glx.cpp
+    )
+    target_link_libraries(
+        mbgl-core
+        PRIVATE
+            OpenGL::GLX
+    )
+endif()
 
 # FIXME: Should not be needed, but now needed by node because of the headless frontend.
 target_include_directories(
@@ -68,7 +92,7 @@ include(${PROJECT_SOURCE_DIR}/vendor/nunicode.cmake)
 include(${PROJECT_SOURCE_DIR}/vendor/sqlite.cmake)
 
 if(NOT ${ICU_FOUND} OR "${ICU_VERSION}" VERSION_LESS 62.0)
-    message("-- ICU not found or too old, using builtin.")
+    message(STATUS "ICU not found or too old, using builtin.")
 
     set(MBGL_USE_BUILTIN_ICU TRUE)
     include(${PROJECT_SOURCE_DIR}/vendor/icu.cmake)
@@ -91,7 +115,6 @@ target_link_libraries(
         $<$<NOT:$<BOOL:${MBGL_USE_BUILTIN_ICU}>>:ICU::i18n>
         $<$<NOT:$<BOOL:${MBGL_USE_BUILTIN_ICU}>>:ICU::uc>
         $<$<BOOL:${MBGL_USE_BUILTIN_ICU}>:mbgl-vendor-icu>
-        OpenGL::GLX
         PNG::PNG
         mbgl-vendor-nunicode
         mbgl-vendor-sqlite

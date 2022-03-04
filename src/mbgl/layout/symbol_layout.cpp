@@ -645,8 +645,8 @@ void SymbolLayout::addFeature(const std::size_t layoutFeatureIndex,
             Anchors anchors = getAnchors(line,
                                          symbolSpacing,
                                          textMaxAngle,
-                                         (shapedTextOrientations.vertical ?: getDefaultHorizontalShaping(shapedTextOrientations)).left,
-                                         (shapedTextOrientations.vertical ?: getDefaultHorizontalShaping(shapedTextOrientations)).right,
+                                         (shapedTextOrientations.vertical ? shapedTextOrientations.vertical : getDefaultHorizontalShaping(shapedTextOrientations)).left,
+                                         (shapedTextOrientations.vertical ? shapedTextOrientations.vertical : getDefaultHorizontalShaping(shapedTextOrientations)).right,
                                          (shapedIcon ? shapedIcon->left() : 0),
                                          (shapedIcon ? shapedIcon->right() : 0),
                                          glyphSize,
@@ -666,8 +666,8 @@ void SymbolLayout::addFeature(const std::size_t layoutFeatureIndex,
             if (line.size() > 1) {
                 optional<Anchor> anchor = getCenterAnchor(line,
                                                           textMaxAngle,
-                                                          (shapedTextOrientations.vertical ?: getDefaultHorizontalShaping(shapedTextOrientations)).left,
-                                                          (shapedTextOrientations.vertical ?: getDefaultHorizontalShaping(shapedTextOrientations)).right,
+                                                          (shapedTextOrientations.vertical ? shapedTextOrientations.vertical : getDefaultHorizontalShaping(shapedTextOrientations)).left,
+                                                          (shapedTextOrientations.vertical ? shapedTextOrientations.vertical : getDefaultHorizontalShaping(shapedTextOrientations)).right,
                                                           (shapedIcon ? shapedIcon->left() : 0),
                                                           (shapedIcon ? shapedIcon->right() : 0),
                                                           glyphSize,
@@ -974,7 +974,7 @@ size_t SymbolLayout::addSymbol(SymbolBucket::Buffer& buffer,
     // coordinate in this polygon.
     auto& segment = buffer.segments.back();
     assert(segment.vertexLength <= std::numeric_limits<uint16_t>::max());
-    uint16_t index = segment.vertexLength;
+    auto index = static_cast<uint16_t>(segment.vertexLength);
 
     // coordinates (2 triangles)
     buffer.vertices.emplace_back(SymbolSDFIconProgram::layoutVertex(labelAnchor.point,
@@ -1092,7 +1092,7 @@ void SymbolLayout::addToDebugBuffers(SymbolBucket& bucket) {
                 }
 
                 auto& segment = collisionBuffer.segments.back();
-                uint16_t index = segment.vertexLength;
+                auto index = static_cast<uint16_t>(segment.vertexLength);
 
                 collisionBuffer.vertices.emplace_back(CollisionBoxProgram::layoutVertex(anchor, symbolInstance.anchor.point, tl));
                 collisionBuffer.vertices.emplace_back(CollisionBoxProgram::layoutVertex(anchor, symbolInstance.anchor.point, tr));

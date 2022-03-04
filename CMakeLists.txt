@@ -1,4 +1,19 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+
+option(MBGL_WITH_CORE_ONLY "Build only the core bits, no platform code" OFF)
+option(MBGL_WITH_COVERAGE "Enable code coverage collection" OFF)
+option(MBGL_WITH_QT "Build Mapbox GL Qt bindings" OFF)
+option(MBGL_QT_STATIC "Build Mapbox GL Qt bindings staticly" OFF)
+option(MBGL_WITH_SANITIZER "Use [address|thread|undefined] here" OFF)
+option(MBGL_WITH_RTTI "Compile with runtime type information" OFF)
+option(MBGL_WITH_OPENGL "Build with OpenGL renderer" ON)
+option(MBGL_WITH_EGL "Build with EGL renderer" OFF)
+option(MBGL_WITH_WERROR "Make all compilation warnings errors" ON)
+
+if (MBGL_WITH_QT AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0)
+endif()
+
 project("Mapbox GL Native" LANGUAGES CXX C)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -14,14 +29,6 @@ include(CTest)
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
-
-option(MBGL_WITH_CORE_ONLY "Build only the core bits, no platform code" OFF)
-option(MBGL_WITH_COVERAGE "Enable code coverage collection" OFF)
-option(MBGL_WITH_QT "Build Mapbox GL Qt bindings" OFF)
-option(MBGL_WITH_SANITIZER "Use [address|thread|undefined] here" OFF)
-option(MBGL_WITH_RTTI "Compile with runtime type information" OFF)
-option(MBGL_WITH_OPENGL "Build with OpenGL renderer" ON)
-option(MBGL_WITH_WERROR "Make all compilation warnings errors" ON)
 
 add_library(
     mbgl-compiler-options INTERFACE
@@ -48,7 +55,7 @@ target_compile_options(
         -fsanitize-blacklist=${UBSAN_BLACKLIST}>
         $<$<STREQUAL:${MBGL_WITH_SANITIZER},undefined>:-fsanitize=float-divide-by-zero,
         -fsanitize-blacklist=${UBSAN_BLACKLIST}>
-        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<BOOL:${MBGL_WITH_RTTI}>>>:-fno-rtti>
+        $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<OR:$<BOOL:${MBGL_WITH_RTTI}>,$<CXX_COMPILER_ID:MSVC>>>>:-fno-rtti>
         $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wall>
         $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wshadow>
         $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wextra>
@@ -57,9 +64,15 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:GNU>:-Wno-error=maybe-uninitialized>
         $<$<CXX_COMPILER_ID:GNU>:-Wno-error=return-type>
         $<$<CXX_COMPILER_ID:GNU>:-Wno-error=unknown-pragmas>
-        $<$<CXX_COMPILER_ID:AppleClang>:-Wno-error=deprecated-declarations>
-        $<$<CXX_COMPILER_ID:AppleClang>:-Wno-error=unused-parameter>
-        $<$<CXX_COMPILER_ID:AppleClang>:-Wno-error=unused-property-ivar>
+        $<$<AND:$<CXX_COMPILER_ID:AppleClang>,$<NOT:$<BOOL:${MBGL_WITH_QT}>>>:-Wno-error=deprecated-declarations>
+        $<$<AND:$<CXX_COMPILER_ID:AppleClang>,$<NOT:$<BOOL:${MBGL_WITH_QT}>>>:-Wno-error=unused-parameter>
+        $<$<AND:$<CXX_COMPILER_ID:AppleClang>,$<NOT:$<BOOL:${MBGL_WITH_QT}>>>:-Wno-error=unused-property-ivar>
+        $<$<CXX_COMPILER_ID:MSVC>:/utf-8>
+        # $<$<CXX_COMPILER_ID:MSVC>:/WX>    # all warnings as errors
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4068>  # pragma
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # types
+        $<$<CXX_COMPILER_ID:MSVC>:/wd4828>  # encoding
+        $<$<CXX_COMPILER_ID:MSVC>:/D_CRT_SECURE_NO_WARNINGS>
 )
 
 target_link_libraries(
@@ -73,11 +86,11 @@ target_link_libraries(
 
 cmake_policy(SET CMP0063 NEW)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -85,14 +98,13 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_VISIBILITY_INLINES_HIDDEN 1)
 
-if(MBGL_WITH_QT)
-    find_package(Qt5Core REQUIRED)
-    set(CMAKE_AUTOMOC ON)
-    set(CMAKE_AUTORCC ON)
+if(MBGL_QT_STATIC)
+    add_library(mbgl-core OBJECT)
+else()
+    add_library(mbgl-core STATIC)
 endif()
-
-add_library(
-    mbgl-core STATIC
+target_sources(
+    mbgl-core PRIVATE
     ${PROJECT_SOURCE_DIR}/include/mbgl/actor/actor.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/actor/actor_ref.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/actor/aspiring_actor.hpp
@@ -267,6 +279,8 @@ add_library(
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/run_loop.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/size.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/string.hpp
+    ${PROJECT_SOURCE_DIR}/include/mbgl/util/default_style.hpp
+    ${PROJECT_SOURCE_DIR}/include/mbgl/util/tile_server_options.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/thread.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/tileset.hpp
     ${PROJECT_SOURCE_DIR}/include/mbgl/util/timer.hpp
@@ -529,7 +543,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/mbgl/sprite/sprite_parser.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/sprite/sprite_parser.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/storage/asset_file_source.hpp
-    ${PROJECT_SOURCE_DIR}/src/mbgl/storage/mbtiles_file_source.hpp    
+    ${PROJECT_SOURCE_DIR}/src/mbgl/storage/mbtiles_file_source.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/storage/file_source_manager.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/storage/http_file_source.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/storage/local_file_source.hpp
@@ -810,6 +824,8 @@ add_library(
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/tile_cover_impl.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/tile_cover_impl.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/tile_range.hpp
+    ${PROJECT_SOURCE_DIR}/src/mbgl/util/default_style.cpp    
+    ${PROJECT_SOURCE_DIR}/src/mbgl/util/tile_server_options.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/tiny_sdf.cpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/tiny_sdf.hpp
     ${PROJECT_SOURCE_DIR}/src/mbgl/util/token.hpp
@@ -822,7 +838,7 @@ add_library(
 )
 
 if(MBGL_WITH_OPENGL)
-    message("-- Configuring GL-Native with OpenGL renderer backend")
+    message(STATUS "Configuring GL-Native with OpenGL renderer backend")
     target_compile_definitions(
         mbgl-core
         PRIVATE MBGL_RENDER_BACKEND_OPENGL=1

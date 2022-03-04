@@ -2,11 +2,42 @@
 
 MapLibre welcomes participation and contributions from everyone. Please read [`Contributing Guide`](https://github.com/maplibre/maplibre-gl-native/blob/master/CONTRIBUTING.md) to get started.
 
-## master
+## 9.5.2 - December 02, 2021
+
+### Bug Fixes
+
+* raster layers stopped working in Android [#161](https://github.com/maplibre/maplibre-gl-native/pull/161)
+* remove Mapbox's in favor of MapLibre in attribution dialog [#160](https://github.com/maplibre/maplibre-gl-native/pull/160)
+* queryRenderedFeatures returns wrong results - issue #184, [#147](https://github.com/maplibre/maplibre-gl-native/pull/174)
+
+## 9.5.1 - September 06, 2021
+
+### Bug Fixes
+
+* Invalid tile url template for MapLibre style [#107](https://github.com/maplibre/maplibre-gl-native/pull/107)
+* Crash when inflating view on Android [#130](https://github.com/maplibre/maplibre-gl-native/pull/130)
+
+### Other
+
+* Fix perf regression in cached tiles of tile pyramid [#129](https://github.com/maplibre/maplibre-gl-native/pull/129)
+* Upgrade to newest protozero [#148](https://github.com/maplibre/maplibre-gl-native/pull/148)
+* Change NativeMapView.resizeView to use 0 instead of throwing IllegalArgumentException [#151](https://github.com/maplibre/maplibre-gl-native/pull/151)
+
+## 9.5.0 - June 29, 2021
 
 ### Features
 
-### Bug Fixes
+* Replacing hardcoded configuration with configurable API and removing Mapbox assets and dependencies [#90](https://github.com/maplibre/maplibre-gl-native/pull/90)
+
+### Other
+
+* Migration from bintray [#77](https://github.com/maplibre/maplibre-gl-native/pull/77)
+
+## 9.4.2 - May 6, 2021
+
+### Other
+
+Switching from mapbox-java libraries to [maplibre fork](https://github.com/maplibre/maplibre-java)
 
 ## 9.4.0 - March 12, 2021
 

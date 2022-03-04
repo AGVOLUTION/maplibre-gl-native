@@ -101,7 +101,7 @@ private:
     template <std::size_t ...I>
     EvaluationResult applyImpl(const EvaluationContext& evaluationParameters, const Args& args, std::index_sequence<I...>) const {
         std::array<Value, sizeof...(Params)> evaluated;
-        for (std::size_t i = 0; i < sizeof...(Params); ++i) {
+        for (int i = 0; i < int(sizeof...(Params)); ++i) {
             const EvaluationResult evaluatedArg = args.at(i)->evaluate(evaluationParameters);
             if (!evaluatedArg) return evaluatedArg.error();
             evaluated[i] = *evaluatedArg;
@@ -155,7 +155,7 @@ private:
     template <std::size_t ...I>
     EvaluationResult applyImpl(const EvaluationContext& evaluationParameters, const Args& args, std::index_sequence<I...>) const {
         std::array<Value, sizeof...(Params)> evaluated;
-        for (std::size_t i = 0; i < sizeof...(Params); ++i) {
+        for (int i = 0; i < int(sizeof...(Params)); ++i) {
             const EvaluationResult evaluatedArg = args.at(i)->evaluate(evaluationParameters);
             if (!evaluatedArg) return evaluatedArg.error();
             evaluated[i] = *evaluatedArg;
@@ -225,7 +225,7 @@ Value featureIdAsExpressionValue(const EvaluationContext& params) {
 optional<Value> featurePropertyAsExpressionValue(const EvaluationContext& params, const std::string& key) {
     assert(params.feature);
     auto property = params.feature->getValue(key);
-    return property ? toExpressionValue(*property) : optional<Value>();
+    return property ? optional<Value>(toExpressionValue(*property)) : optional<Value>();
 };
 
 optional<std::string> featureTypeAsString(FeatureType type) {

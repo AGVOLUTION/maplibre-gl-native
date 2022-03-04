@@ -32,10 +32,11 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-
+    
     // Use a local style and local assets if they’ve been downloaded.
-    NSURL *tileSourceURL = [[NSBundle mainBundle] URLForResource:@"mapbox.mapbox-terrain-v2,mapbox.mapbox-streets-v6" withExtension:nil subdirectory:@"tiles"];
-    NSURL *url = [NSURL URLWithString:tileSourceURL ? @"asset://styles/streets-v8.json" : @"mapbox://styles/mapbox/streets-v8"];
+    NSURL *tile = [[NSBundle mainBundle] URLForResource:@"11" withExtension:@"pbf" subdirectory:@"tiles/tiles/v3/5/7"];
+    NSURL *tileSourceURL = [[NSBundle mainBundle] URLForResource:@"openmaptiles" withExtension:@"json" subdirectory:@"tiles"];
+    NSURL *url = [NSURL URLWithString:tile ? @"asset://styles/streets.json" : @"maptiler://maps/streets"];
     self.mapView = [[MGLMapView alloc] initWithFrame:self.view.bounds styleURL:url];
     self.mapView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.mapView.delegate = self;
@@ -51,8 +52,52 @@
 - (void)viewDidAppear:(BOOL)animated
 {
     [super viewDidAppear:animated];
+    
+    #ifdef LOG_TO_DOCUMENTS_DIR
+    [self setAndRedirectLogFileToDocuments];
+    #endif
 
     [self startBenchmarkIteration];
+}
+
+// For setting the filename
+NSDate* const currentDate = [NSDate date];
+
+/*!
+ \description
+  Write the Benchmark log to the Documents Directory.  For the device or simulator, fetch the Documents Directory, and make a friendly name for the benchmarking output file.  In Build Settings > Other C Flags add the compiler flag. `-DLOG_TO_DOCUMENTS_DIR`
+ */
+- (void)setAndRedirectLogFileToDocuments
+{
+    NSString* const name = UIDevice.currentDevice.name;
+    #if TARGET_IPHONE_SIMULATOR
+        NSString* const DeviceMode = @"Simulator";
+    #else
+        NSString* const DeviceMode = @"Device";
+    #endif
+
+    // Set log file name date
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM-dd-HHmm"];
+    NSString *dateString = [formatter stringFromDate:currentDate];
+    
+    // Set the log file name
+    NSString* filename = [NSString stringWithFormat: @"MapLibre-bench-%@-%@-%@.log", name, DeviceMode, dateString];
+
+    // Set log file path
+    NSArray *allPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *documentsDirectory = [allPaths objectAtIndex:0];
+    NSString *pathForLog = [documentsDirectory stringByAppendingPathComponent: filename];
+    NSLog(@"Writing MapLibre Bench log.  To open in Console, use the CLI command");
+    NSLog(@"  open \"%@\"", pathForLog);
+
+    [self redirectLogToDocuments :pathForLog];
+}
+
+- (void)redirectLogToDocuments: (NSString*) fileName
+{
+    // write to file in append "a+" mode
+    freopen([fileName cStringUsingEncoding:NSASCIIStringEncoding], "a+", stderr);
 }
 
 size_t idx = 0;

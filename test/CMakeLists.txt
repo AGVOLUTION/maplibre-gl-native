@@ -59,7 +59,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/test/style/style_image.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/style_layer.test.cpp
     ${PROJECT_SOURCE_DIR}/test/style/style_parser.test.cpp
-    ${PROJECT_SOURCE_DIR}/test/text/bidi.test.cpp
+    $<$<NOT:$<PLATFORM_ID:Windows>>:${PROJECT_SOURCE_DIR}/test/text/bidi.test.cpp>
     ${PROJECT_SOURCE_DIR}/test/text/calculate_tile_distances.test.cpp
     ${PROJECT_SOURCE_DIR}/test/text/cross_tile_symbol_index.test.cpp
     ${PROJECT_SOURCE_DIR}/test/text/formatted.test.cpp
@@ -106,6 +106,7 @@ add_library(
     ${PROJECT_SOURCE_DIR}/test/util/timer.test.cpp
     ${PROJECT_SOURCE_DIR}/test/util/token.test.cpp
     ${PROJECT_SOURCE_DIR}/test/util/url.test.cpp
+    ${PROJECT_SOURCE_DIR}/test/util/tile_server_options.test.cpp    
 )
 
 # MapSnapshotter uses headless backend that is rendering image on a background thread. QT / macOS adaptation for headless backend creates
@@ -224,6 +225,7 @@ target_link_libraries(
 target_link_libraries(
     mbgl-test
     PUBLIC mbgl-vendor-googletest
+    $<$<AND:$<PLATFORM_ID:Windows>,$<BOOL:MINGW>>:psapi>
 )
 
 set_property(TARGET mbgl-test PROPERTY FOLDER Core)

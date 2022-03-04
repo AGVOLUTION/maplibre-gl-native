@@ -2,9 +2,44 @@
 
 MapLibre welcomes participation and contributions from everyone. Please read [`Contributing Guide`](https://github.com/maplibre/maplibre-gl-native/blob/master/CONTRIBUTING.md) to get started.
 
-## master
+## 5.12.2 - December 02, 2021
+
+### Improvements
+
+* Exposes the windowBit value from zlib in the compress/decompress helper utils [#147](https://github.com/maplibre/maplibre-gl-native/pull/147)
+* Fix camera paddings reset on map view gestures performing [#188](https://github.com/maplibre/maplibre-gl-native/pull/188)
+
+## 5.12.1 - September 06, 2021
+
+### Bug Fixes
+
+* ScaleBar enhancements [#120](https://github.com/maplibre/maplibre-gl-native/pull/120), [#121](https://github.com/maplibre/maplibre-gl-native/pull/121)
+* Invalid tile url template for MapLibre style [#107](https://github.com/maplibre/maplibre-gl-native/pull/107)
+* Address crash when localFontFamilyName is nil [#109](https://github.com/maplibre/maplibre-gl-native/pull/109)
+* Fix for annotations stuttering and drifting when panning [#113](https://github.com/maplibre/maplibre-gl-native/pull/113)
+* Adjust local glyphs [#122](https://github.com/maplibre/maplibre-gl-native/pull/122)
+* Return correct Mapbox TileServerOptions [#132](https://github.com/maplibre/maplibre-gl-native/pull/132)
+
+### Other
+
+* Fix perf regression in cached tiles of tile pyramid [#129](https://github.com/maplibre/maplibre-gl-native/pull/129)
+* Upgrade to newest protozero [#148](https://github.com/maplibre/maplibre-gl-native/pull/148)
+* Fix build for Xcode 12.5 & 13-beta. [#153](https://github.com/maplibre/maplibre-gl-native/pull/153)
+
+## 5.12.0 - June 29, 2021
 
 ### Features
+
+* Added allowScrollGesturesDuringRotateOrZoom [#60](https://github.com/maplibre/maplibre-gl-native/pull/62)
+* Replacing hardcoded configuration with configurable API and removing Mapbox assets and dependencies [#90](https://github.com/maplibre/maplibre-gl-native/pull/90)
+
+### Bug Fixes
+
+* Fix map stuttering by switching render call to use setNeedsDisplay [#60](https://github.com/maplibre/maplibre-gl-native/pull/60)
+* Dispatch to main queue, rather than global [#64](https://github.com/maplibre/maplibre-gl-native/pull/64)
+* Use DisplayLink to prevent crashes in willResignActive [#68](https://github.com/maplibre/maplibre-gl-native/pull/68)
+* Ignore sizing and positioning for hidden elements in assertions [#80](https://github.com/maplibre/maplibre-gl-native/pull/80)
+* Disable map snapshots by default [#83](https://github.com/maplibre/maplibre-gl-native/pull/83)
 
 ## 5.11.0 - March 12, 2021
 

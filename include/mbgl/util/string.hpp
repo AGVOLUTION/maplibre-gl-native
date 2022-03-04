@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdlib>
 #include <type_traits>
+#include <exception>
 
 // Polyfill needed by Qt when building for Android with GCC
 #if defined(__ANDROID__) && defined(__GLIBCXX__)
@@ -55,6 +56,11 @@ inline std::string toString(unsigned long t) {
 template <typename = std::enable_if<!std::is_same<uint64_t, unsigned long long>::value>>
 inline std::string toString(unsigned long long t) {
     return toString(static_cast<uint64_t>(t));
+}
+
+template <typename = std::enable_if<!std::is_same<int64_t, long long>::value>>
+inline std::string toString(long long t) {
+    return toString(static_cast<int64_t>(t));
 }
 
 inline std::string toString(float t, bool decimal = false) {
